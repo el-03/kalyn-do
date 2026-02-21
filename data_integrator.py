@@ -81,9 +81,6 @@ def fetch_column(
         return False, f"Unexpected error: {e}", []
 
 
-from typing import Any, Dict, Optional, Tuple
-
-
 def fetch_column_w_id(
         table_name: str,
         col_name: str,
@@ -571,10 +568,6 @@ def get_item_qty_stock(
 
     except Exception as e:
         return False, str(e), 0
-
-
-from typing import Dict, Any, Optional
-
 
 def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, Any]]:
     """
