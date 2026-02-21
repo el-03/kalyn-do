@@ -120,16 +120,20 @@ if __name__ == "__main__":
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # ======= VARIABLES YOU CHANGE =======
-    schema_name = "kalyn_db"
-    table_name = "category"
-    file_name = "../raw_data/category.csv"
-    conflict_cols = ["category"]
+    schema_name = "kalyn_db_test"
+    # table_name = "category"
+    # file_name = "../raw_data/category.csv"
+    # conflict_cols = ["category"]
     # table_name = "color"
     # file_name = "../raw_data/color.csv"
     # conflict_cols = ["color"]
-    # table_name = "item_name"
-    # file_name = "../raw_data/item_name.csv"
-    # conflict_cols = ["item_name"]
+    table_name = "item_name"
+    file_name = "../raw_data/item_name.csv"
+    conflict_cols = ["item_name"]
+
+    # tables = ["category", "color", "item_name"]
+    # files = ["../raw_data/category.csv", "../raw_data/color.csv", "../raw_data/item_name.csv"]
+    # conflict_cols = ["category", "color", "item_name"]
 
     # This must match a UNIQUE constraint in Postgres for true “no duplicates”
 

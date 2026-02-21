@@ -512,11 +512,11 @@ def transfer_stock(
 
 
 def get_item_qty_stock(
-        category_id: int,
-        item_name_id: int,
-        color_id: int,
-        store_id: int,
-        size: Optional[str] = "OS",
+    category_id: int,
+    item_name_id: int,
+    color_id: int,
+    store_id: int,
+    size: Optional[str] = "OS",
 ) -> Tuple[bool, str, int]:
     """
     Get current stock quantity for a specific item + store.
@@ -526,26 +526,47 @@ def get_item_qty_stock(
     """
 
     try:
-        resp = (
+        # 1) Resolve the item_id from the master table
+        item_resp = (
             supabase.schema(schema)
-            .table("item_stock")
-            .select("quantity")
+            .table("item")
+            .select("id")
             .eq("category_id", category_id)
             .eq("item_name_id", item_name_id)
             .eq("color_id", color_id)
+            .limit(1)
+            .execute()
+        )
+
+        if getattr(item_resp, "error", None):
+            return False, f"Fetch item failed: {item_resp.error}", 0
+
+        if not item_resp.data:
+            # No such item defined in master data
+            return True, "Item not found", 0
+
+        item_id = item_resp.data[0]["id"]
+
+        # 2) Read stock snapshot for that item_id + store + size
+        stock_resp = (
+            supabase.schema(schema)
+            .table("item_stock")
+            .select("quantity")
+            .eq("item_id", item_id)
             .eq("store_id", store_id)
             .eq("size", size)
             .limit(1)
             .execute()
         )
 
-        if getattr(resp, "error", None):
-            return False, f"Fetch failed: {resp.error}", 0
+        if getattr(stock_resp, "error", None):
+            return False, f"Fetch stock failed: {stock_resp.error}", 0
 
-        if not resp.data:
+        if not stock_resp.data:
+            # Item exists, but no stock row yet → treat as 0
             return True, "No stock found", 0
 
-        quantity = resp.data[0]["quantity"]
+        quantity = stock_resp.data[0]["quantity"]
         return True, "Fetched", quantity
 
     except Exception as e:
@@ -559,15 +580,21 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
     """
     Returns a dict of items currently in stock.
 
-    Structure:
+    Structure (one entry per SKU+size):
     {
-        sku: {
+        "<sku>|<size>": {
             "item_name": str,
             "category": str,
             "color": str,
             "sku": str,
+            "size": str,
             "harga_jual": int | None,
-            "quantity": int
+            "quantity": int,
+
+            # for transfer_stock(...)
+            "item_name_id": int,
+            "category_id": int,
+            "color_id": int,
         },
         ...
     }
@@ -582,9 +609,13 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
             .select(
                 """
                 quantity,
+                size,
                 item:item_id (
                     id,
                     sku,
+                    item_name_id,
+                    category_id,
+                    color_id,
                     item_name:item_name_id ( item_name ),
                     category:category_id ( category ),
                     color:color_id ( color )
@@ -631,7 +662,7 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
             row["item_id"]: row["harga_jual"] for row in (price_resp.data or [])
         }
 
-        # 4) Build the result grouped by SKU
+        # 4) Build the result grouped by SKU + size
         result: Dict[str, Dict[str, Any]] = {}
 
         for row in stock_resp.data:
@@ -641,6 +672,7 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
 
             item_id = item["id"]
             sku = item["sku"]
+            size = row.get("size", "OS")
 
             item_name_obj = item.get("item_name") or {}
             category_obj = item.get("category") or {}
@@ -652,21 +684,167 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
 
             harga_jual = prices_by_item_id.get(item_id)
 
-            # Initialize if not seen yet
-            if sku not in result:
-                result[sku] = {
+            item_name_id = item.get("item_name_id")
+            category_id = item.get("category_id")
+            color_id = item.get("color_id")
+
+            # key is SKU + size so we don't mix sizes
+            key = f"{sku}|{size}"
+
+            if key not in result:
+                result[key] = {
                     "item_name": item_name,
                     "category": category,
                     "color": color,
                     "sku": sku,
+                    "size": size,
                     "harga_jual": harga_jual,
                     "quantity": 0,
+                    "item_name_id": item_name_id,
+                    "category_id": category_id,
+                    "color_id": color_id,
                 }
 
-            # Sum quantity across sizes / rows
-            result[sku]["quantity"] += row["quantity"]
+            # Sum quantity across rows with same SKU+size
+            result[key]["quantity"] += row["quantity"]
 
         return result
 
     except Exception as e:
         raise Exception(f"Failed to get items in stock: {e}") from e
+
+
+def transfer_via_logs(
+    *,
+    item_id: int,
+    size: str,
+    from_store_id: int,
+    to_store_id: int,
+    quantity: int,
+) -> tuple[bool, str]:
+    """
+    Transfer stock by writing two item_stock_log rows:
+      - transfer_out from from_store_id
+      - transfer_in  to   to_store_id
+
+    Quantity is positive here; insert_stock_log will handle the sign.
+    """
+    if quantity <= 0:
+        return False, "Quantity must be positive"
+
+    # 1) transfer_out from source
+    ok_out, msg_out, _ = insert_stock_log(
+        {
+            "item_id": item_id,
+            "store_id": from_store_id,
+            "jumlah_barang": quantity,
+            "movement_type": "transfer_out",
+            "size": size,
+        }
+    )
+    if not ok_out:
+        return False, f"transfer_out failed: {msg_out}"
+
+    # 2) transfer_in to destination
+    ok_in, msg_in, _ = insert_stock_log(
+        {
+            "item_id": item_id,
+            "store_id": to_store_id,
+            "jumlah_barang": quantity,
+            "movement_type": "transfer_in",
+            "size": size,
+        }
+    )
+    if not ok_in:
+        # at this point gudang has already been reduced;
+        # you *could* add a compensating transfer_in back to gudang if you want.
+        return False, f"transfer_in failed after transfer_out: {msg_in}"
+
+    return True, "Transfer OK"
+
+def get_item_id_from_attrs(category_id: int, item_name_id: int, color_id: int):
+    """
+    Resolve item_id from category/item_name/color.
+    Returns (ok, msg, item_id_or_none)
+    """
+    try:
+        resp = (
+            supabase.schema(schema)
+            .table("item")
+            .select("id")
+            .eq("category_id", category_id)
+            .eq("item_name_id", item_name_id)
+            .eq("color_id", color_id)
+            .limit(1)
+            .execute()
+        )
+
+        if getattr(resp, "error", None):
+            return False, f"Fetch item_id failed: {resp.error}", None
+
+        if not resp.data:
+            return False, "Item belum terdaftar di master item", None
+
+        return True, "OK", resp.data[0]["id"]
+    except Exception as e:
+        return False, str(e), None
+
+
+def get_item_qty_stock_by_item_id(
+    item_id: int,
+    store_id: int,
+    size: str = "OS",
+):
+    """
+    Returns: (ok, msg, quantity)
+    """
+    try:
+        resp = (
+            supabase.schema(schema)
+            .table("item_stock")
+            .select("quantity")
+            .eq("item_id", item_id)
+            .eq("store_id", store_id)
+            .eq("size", size)
+            .limit(1)
+            .execute()
+        )
+
+        if getattr(resp, "error", None):
+            return False, f"Fetch stock failed: {resp.error}", 0
+
+        if not resp.data:
+            return True, "No stock found", 0
+
+        return True, "Fetched", resp.data[0]["quantity"]
+    except Exception as e:
+        return False, str(e), 0
+
+def get_item_qty_stock_by_item_id(
+    item_id: int,
+    store_id: int,
+    size: str = "OS",
+) -> Tuple[bool, str, int]:
+    try:
+        resp = (
+            supabase.schema(schema)
+            .table("item_stock")
+            .select("quantity")
+            .eq("item_id", item_id)
+            .eq("store_id", store_id)
+            .eq("size", size)
+            .limit(1)
+            .execute()
+        )
+
+        if getattr(resp, "error", None):
+            return False, f"Fetch stock failed: {resp.error}", 0
+
+        if not resp.data:
+            return True, "No stock found", 0
+
+        qty = resp.data[0]["quantity"]
+        return True, "Fetched", qty
+
+    except Exception as e:
+        return False, str(e), 0

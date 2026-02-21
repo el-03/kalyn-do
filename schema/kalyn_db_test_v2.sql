@@ -20,7 +20,7 @@ CREATE TABLE kalyn_db_test.category
 (
     id       SERIAL PRIMARY KEY,
     category VARCHAR NOT NULL UNIQUE,
-    code     VARCHAR NOT NULL UNIQUE
+    code     VARCHAR NOT NULL UNIQUE   -- used in SKU
 );
 
 CREATE TABLE kalyn_db_test.item_name
@@ -44,7 +44,7 @@ VALUES ('banda'),
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================
--- ITEM MASTER (WITH SKU)
+-- ITEM MASTER (WITH SKU USING CATEGORY.CODE)
 -- ============================================================================
 
 CREATE TABLE kalyn_db_test.item
@@ -63,13 +63,9 @@ CREATE TABLE kalyn_db_test.item
     created_year INTEGER NOT NULL
         DEFAULT EXTRACT(YEAR FROM now())::int,
 
-    -- SKU: year + category_id + item_name_id + color_id (no padding)
-    sku TEXT GENERATED ALWAYS AS (
-        created_year::text
-        || category_id::text
-        || item_name_id::text
-        || color_id::text
-    ) STORED,
+    -- will be filled by trigger:
+    -- T005KLY${2_last_digits_year}${catCode}${itemId}${colorId}
+    sku TEXT NOT NULL,
 
     CONSTRAINT ux_item_unique
         UNIQUE (item_name_id, category_id, color_id),
@@ -77,6 +73,58 @@ CREATE TABLE kalyn_db_test.item
     CONSTRAINT ux_item_sku_unique
         UNIQUE (sku)
 );
+
+-- ============================================================================
+-- TRIGGER: SET SKU USING category.code
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION kalyn_db_test.set_item_sku()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_cat_code text;
+    v_year     int;
+    v_year_2   text;
+BEGIN
+    -- ensure created_year is set
+    IF NEW.created_year IS NULL THEN
+        v_year := EXTRACT(YEAR FROM now())::int;
+        NEW.created_year := v_year;
+    ELSE
+        v_year := NEW.created_year;
+    END IF;
+
+    -- lookup category code
+    SELECT c.code
+    INTO v_cat_code
+    FROM kalyn_db_test.category c
+    WHERE c.id = NEW.category_id;
+
+    IF v_cat_code IS NULL THEN
+        RAISE EXCEPTION 'Category % not found for item', NEW.category_id;
+    END IF;
+
+    -- last 2 digits of year, zero-padded
+    v_year_2 := to_char((v_year % 100), 'FM00');
+
+    -- SKU: T005KLY${2_last_digits_year}${catCode}${itemId}${colorId}
+    NEW.sku := 'T005KLY'
+               || v_year_2
+               || v_cat_code
+               || NEW.id::text
+               || NEW.color_id::text;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_set_item_sku ON kalyn_db_test.item;
+
+CREATE TRIGGER trg_set_item_sku
+BEFORE INSERT OR UPDATE ON kalyn_db_test.item
+FOR EACH ROW
+EXECUTE FUNCTION kalyn_db_test.set_item_sku();
 
 -- ============================================================================
 -- ITEM PRICE HISTORY (TEMPORAL)
@@ -87,7 +135,7 @@ CREATE TABLE kalyn_db_test.item_price_history
     id             SERIAL PRIMARY KEY,
 
     item_id        INTEGER NOT NULL
-        REFERENCES kalyn_db.item (id),
+        REFERENCES kalyn_db_test.item (id),
 
     harga_kain       INTEGER NOT NULL,
     ongkos_jahit     INTEGER NOT NULL,
@@ -111,9 +159,9 @@ CREATE TABLE kalyn_db_test.item_price_history
     valid_to   TIMESTAMPTZ
 );
 
--- only one active price per item
+-- Only one active price per item (where valid_to IS NULL)
 CREATE UNIQUE INDEX uq_active_price_per_item
-    ON kalyn_db.item_price_history (item_id)
+    ON kalyn_db_test.item_price_history (item_id)
     WHERE valid_to IS NULL;
 
 CREATE INDEX ix_item_price_history_item_time
@@ -156,15 +204,15 @@ CREATE TABLE kalyn_db_test.item_stock
 
 CREATE TABLE kalyn_db_test.item_stock_log
 (
-    id           SERIAL PRIMARY KEY,
+    id            SERIAL PRIMARY KEY,
 
-    item_id      INTEGER NOT NULL
+    item_id       INTEGER NOT NULL
         REFERENCES kalyn_db_test.item (id),
 
-    store_id     INTEGER NOT NULL
+    store_id      INTEGER NOT NULL
         REFERENCES kalyn_db_test.store (id),
 
-    size         VARCHAR(10) NOT NULL DEFAULT 'OS',
+    size          VARCHAR(10) NOT NULL DEFAULT 'OS',
 
     movement_type VARCHAR(30) NOT NULL,
 

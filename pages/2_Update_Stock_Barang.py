@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
-from data_integrator import fetch_column_w_id, insert_stock_log, get_item_qty_stock
+from data_integrator import (
+    fetch_column_w_id,
+    insert_stock_log,
+    get_item_id_from_attrs,          # NEW
+    get_item_qty_stock_by_item_id,   # NEW
+)
 
 st.set_page_config(
     page_title="Update Stock Barang",
@@ -27,9 +32,13 @@ def confirmation_dialog(value, state_name):
         st.rerun()
 
 
-if 'stock_update_state' not in st.session_state:
-    st.session_state['stock_update_state'] = False
-    st.session_state['get_item_stock'] = False
+# -------------------------------------------------------------------
+# Session state defaults
+# -------------------------------------------------------------------
+
+if "stock_update_state" not in st.session_state:
+    st.session_state["stock_update_state"] = False
+    st.session_state["get_item_stock"] = False
     st.session_state["valid_item_detail"] = False
     st.session_state["item_stock_val"] = None
 
@@ -40,12 +49,17 @@ defaults = {
     "category_id": None,
     "item_name_id": None,
     "color_id": None,
+    "item_id": None,          # NEW
     "size": "OS",
     "jumlah_barang": 0,
 }
 
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
+
+# -------------------------------------------------------------------
+# Dropdowns
+# -------------------------------------------------------------------
 
 st.subheader("Update Stock Barang")
 ok_1, msg_1, category_map = fetch_column_w_id("category", "category")
@@ -91,8 +105,14 @@ st.selectbox(
     key="size",
 )
 
+# -------------------------------------------------------------------
+# Cek stok di gudang (resolve item_id + get stock)
+# -------------------------------------------------------------------
+
+GUDANG_STORE_ID = 4  # 'gudang' dari seed
+
 if st.button("Cek Jumlah Barang di Gudang"):
-    st.session_state['stock_update_state'] = False
+    st.session_state["stock_update_state"] = False
 
     item_detail = {
         "category": st.session_state["category"],
@@ -107,37 +127,59 @@ if st.button("Cek Jumlah Barang di Gudang"):
     if missing:
         st.error(f"Semua input harus diisi! Field kosong: {', '.join(missing)}")
     else:
+        # Map label → id
         st.session_state["category_id"] = category_map[item_detail["category"]]
         st.session_state["item_name_id"] = item_name_map[item_detail["item_name"]]
         st.session_state["color_id"] = color_map[item_detail["color"]]
-        st.session_state["item_stock_val"] = get_item_qty_stock(st.session_state["category_id"],
-                                                                st.session_state["item_name_id"],
-                                                                st.session_state["color_id"],
-                                                                4,
-                                                                st.session_state["size"])
-        st.session_state["valid_item_detail"] = True
+
+        # 1) Resolve item_id dari kombinasi tersebut
+        ok_item, msg_item, item_id = get_item_id_from_attrs(
+            st.session_state["category_id"],
+            st.session_state["item_name_id"],
+            st.session_state["color_id"],
+        )
+
+        if not ok_item or item_id is None:
+            st.session_state["valid_item_detail"] = False
+            st.session_state["item_stock_val"] = None
+            st.error(msg_item)
+        else:
+            st.session_state["item_id"] = item_id
+
+            # 2) Ambil stok berdasarkan item_id
+            st.session_state["item_stock_val"] = get_item_qty_stock_by_item_id(
+                item_id,
+                GUDANG_STORE_ID,
+                st.session_state["size"],
+            )
+            st.session_state["valid_item_detail"] = True
+
+# -------------------------------------------------------------------
+# Form update stock
+# -------------------------------------------------------------------
 
 with st.form("update_stock_input_form"):
     current_stock = 0
     qty = st.session_state["jumlah_barang"]
+
     st.number_input("Jumlah Barang", step=1, key="jumlah_barang")
+
     if st.session_state["item_stock_val"]:
         current_stock = st.session_state["item_stock_val"][2]
         st.caption(f"Jumlah Barang di Gudang: **{current_stock}**")
 
     if st.form_submit_button("Submit"):
 
+        # Payload sekarang pakai item_id, bukan triple ID
         payload = {
-            "category_id": st.session_state["category_id"],
-            "item_name_id": st.session_state["item_name_id"],
-            "color_id": st.session_state["color_id"],
-            "store_id": 4,
+            "item_id": st.session_state["item_id"],
+            "store_id": GUDANG_STORE_ID,
             "movement_type": "adjustment" if qty < 0 else "in_stock",
             "size": st.session_state["size"],
             "jumlah_barang": qty,
         }
 
-        if not st.session_state["valid_item_detail"]:
+        if not st.session_state["valid_item_detail"] or st.session_state["item_id"] is None:
             st.error("Mohon cek jumlah barang di gudang terlebih dahulu")
         else:
             if qty == 0:
@@ -145,7 +187,7 @@ with st.form("update_stock_input_form"):
             elif current_stock + qty < 0:
                 st.error("Melebihi batas stok yang ada")
             else:
-                confirmation_dialog(payload, 'stock_update_state')
+                confirmation_dialog(payload, "stock_update_state")
 
-    if st.session_state['stock_update_state']:
+    if st.session_state["stock_update_state"]:
         st.success(f"Berhasil meng-update jumlah barang menjadi: {current_stock + qty}")
