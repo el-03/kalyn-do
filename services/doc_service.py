@@ -2,7 +2,6 @@ import datetime
 import math
 from typing import List, Dict, Tuple
 
-from dotenv import load_dotenv
 from googleapiclient.discovery import Resource
 
 from domain.models import DeliveryOrder, DeliveryOrderLine

@@ -1,6 +1,5 @@
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 
 from data_integrator import get_items_in_stock, transfer_via_logs
 
