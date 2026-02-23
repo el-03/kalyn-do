@@ -87,7 +87,7 @@ df_stock_display["Harga Jual"] = df_stock_display["Harga Jual"].apply(
 )
 
 st.subheader("Stok Gudang")
-st.dataframe(df_stock_display, width="stretch", hide_index=True)
+st.dataframe(df_stock_display, width="stretch", hide_index=False)
 
 
 # -----------------------------------------------------------------------------
