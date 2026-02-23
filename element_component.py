@@ -8,22 +8,17 @@ def confirmation_dialog_single_submission(name, value, state_name):
     df = pd.DataFrame(value.items(), columns=["Key", "Value"])
     st.dataframe(df, hide_index=True)
 
-    if st.button("Ya"):
-        status, msg, data = insert_row(name, value)
-        st.session_state[state_name] = status
+    col_yes, col_no = st.columns(2)
 
-        if not status:
-            st.error(msg)
-        else:
+    with col_yes:
+        if st.button("Ya", type="primary", key="confirm_yes"):
+            status, msg, data = insert_row(name, value)
+            st.session_state[state_name] = status
+
+            if not status:
+                st.error(msg)
+            else:
+                st.rerun()
+    with col_no:
+        if st.button("Tidak"):
             st.rerun()
-    if st.button("Tidak"):
-        st.rerun()
-
-
-@st.dialog("Berhasil")
-def success_dialog():
-    st.write('Berhasil di input')
-    if st.button("Ya"):
-        st.write("OK")
-    if st.button("Tidak"):
-        st.write("No")

@@ -13,8 +13,8 @@ from utils.formatting import format_rupiah
 # -----------------------------------------------------------------------------
 # Page config
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="Delivery Order", page_icon="📦")
-st.title("📦 Delivery Order Generator")
+st.set_page_config(page_title="Buat Delivery Order", page_icon="📦")
+st.title("📦 Buat Delivery Order")
 
 # -----------------------------------------------------------------------------
 # Store configuration
@@ -33,13 +33,14 @@ WAREHOUSE_STORE_ID = STORE_ID_BY_NAME[WAREHOUSE_STORE_NAME]
 # -----------------------------------------------------------------------------
 # 1) Pick destination store
 # -----------------------------------------------------------------------------
-store_name = st.selectbox(
-    "Store tujuan",
+
+outlet_list = st.selectbox(
+    "Outlet Tujuan",
     options=[name for name in STORE_ID_BY_NAME.keys() if name != WAREHOUSE_STORE_NAME],
 )
-target_store_id = STORE_ID_BY_NAME[store_name]
+target_store_id = STORE_ID_BY_NAME[outlet_list]
 
-st.write(f"Stok akan dikirim dari **{WAREHOUSE_STORE_NAME}** ke **{store_name}**.")
+st.write(f"Stok akan dikirim dari **{WAREHOUSE_STORE_NAME.title()}** ke **{outlet_list.title()}**.")
 st.divider()
 
 
@@ -115,7 +116,7 @@ if "num_items" not in st.session_state:
 if st.button("➕ Tambah Item"):
     st.session_state.num_items += 1
 
-st.subheader("Items yang akan dikirim")
+st.subheader("List Item")
 
 
 # -----------------------------------------------------------------------------
@@ -227,7 +228,7 @@ for i in range(st.session_state.num_items):
 # -----------------------------------------------------------------------------
 # 6) Submit: transfer + summary + two DOCX documents
 # -----------------------------------------------------------------------------
-submitted = st.button("Transfer & Generate Documents")
+submitted = st.button("Buat Dokumen")
 
 if submitted:
     order_rows = []
@@ -286,9 +287,9 @@ if submitted:
         st.subheader("Status Transfer")
         for sku, size, qty, ok, msg in transfer_results:
             if ok:
-                st.success(f"Transfer {sku} ({size}) x{qty} ke {store_name}: {msg}")
+                st.success(f"Transfer {sku} ({size}) x{qty} ke {outlet_list}: {msg}")
             else:
-                st.error(f"Transfer {sku} ({size}) x{qty} ke {store_name} gagal: {msg}")
+                st.error(f"Transfer {sku} ({size}) x{qty} ke {outlet_list} gagal: {msg}")
 
         df_order = pd.DataFrame(order_rows)
         grand_total = df_order["Total"].sum()
@@ -306,12 +307,12 @@ if submitted:
 
         # Build DeliveryOrder domain object
         delivery_order = build_delivery_order_from_rows(
-            outlet_name=store_name.capitalize(),
+            outlet_name=outlet_list.capitalize(),
             order_rows=order_rows,
         )
 
         # Progress + spinner while generating docs
-        progress_text = "Mengenerate dokumen Delivery Order..."
+        progress_text = "Men-generate dokumen Delivery Order..."
         progress_bar = st.progress(0, text=progress_text)
 
         with st.spinner(progress_text):
@@ -330,6 +331,8 @@ if submitted:
                 url=f"https://docs.google.com/document/d/{doc_urls['do_path']}",
                 use_container_width=True,
             )
+            do_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
+            st.write("*Folder Delivery Order*: [link](%s)" % do_url)
 
         with col_barcode:
             st.link_button(
@@ -337,3 +340,5 @@ if submitted:
                 url=f"https://docs.google.com/document/d/{doc_urls['barcode_path']}",
                 use_container_width=True,
             )
+            b_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
+            st.write("*Folder Barcode*: [link](%s)" % b_url)

@@ -11,8 +11,7 @@ st.set_page_config(
     page_title="Update Stock Barang",
     page_icon="👗"
 )
-
-st.sidebar.header("👗 Update Stock Barang")
+st.title("👗 Update Stock Barang")
 
 
 @st.dialog("Konfirmasi")
@@ -60,8 +59,6 @@ for k, v in defaults.items():
 # -------------------------------------------------------------------
 # Dropdowns
 # -------------------------------------------------------------------
-
-st.subheader("Update Stock Barang")
 ok_1, msg_1, category_map = fetch_column_w_id("category", "category")
 ok_2, msg_2, item_name_map = fetch_column_w_id("item_name", "item_name")
 ok_3, msg_3, color_map = fetch_column_w_id("color", "color")

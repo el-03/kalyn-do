@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, Any
-from data_integrator import insert_item, insert_stock_log,fetch_column_w_id, get_item_cost
+from data_integrator import insert_item, insert_stock_log, fetch_column_w_id, get_item_cost
 
 st.set_page_config(page_title="Input Item List Baru", page_icon="👚")
-st.sidebar.header("👚 Input Item List Baru")
+st.title("👚 Item List Input Form")
 
 
 @st.dialog("Konfirmasi")
@@ -128,8 +128,6 @@ defaults = {
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
 
-st.subheader("Item List Input Form")
-
 # Fetch master data
 ok_1, msg_1, category_map = fetch_column_w_id("category", "category")
 ok_2, msg_2, item_name_map = fetch_column_w_id("item_name", "item_name")
@@ -170,10 +168,10 @@ else:
 
 # Pre-fill ongkos from previous price if exists
 if (
-    st.button("Isi dengan Ongkos Sebelumnya")
-    and st.session_state["category"]
-    and st.session_state["item_name"]
-    and st.session_state["color"]
+        st.button("Isi dengan Ongkos Sebelumnya")
+        and st.session_state["category"]
+        and st.session_state["item_name"]
+        and st.session_state["color"]
 ):
     prev_costs = get_item_cost(
         category_map[st.session_state["category"]],

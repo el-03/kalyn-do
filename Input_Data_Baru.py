@@ -4,11 +4,10 @@ from data_integrator import is_exist
 from element_component import confirmation_dialog_single_submission
 
 st.set_page_config(
-    page_title="Input Kategori, Warna, dan Item Baru",
+    page_title="Input Data Baru",
     page_icon="➕"
 )
-
-st.sidebar.header("➕ Input Kategori, Warna, dan Item Baru")
+st.title("➕ Input Data Baru")
 
 if 'category_input_state' not in st.session_state:
     st.session_state['category_input_state'] = False
@@ -61,7 +60,7 @@ def validate_item_name(val):
 
 
 with st.form("category_input_form", enter_to_submit=False):
-    st.subheader("Input Kategori Baru:")
+    st.subheader("Input Kategori Baru")
     cat_name_input = st.text_input("Kategori")
     cat_code_input = st.text_input("Kode")
 
@@ -84,7 +83,7 @@ with st.form("category_input_form", enter_to_submit=False):
         st.success(f"Kategori Baru berhasil di-input")
 
 with st.form("color_input_form", enter_to_submit=False):
-    st.subheader("Input Warna Baru:")
+    st.subheader("Input Warna Baru")
     color_name_input = st.text_input("Warna")
 
     submitted_color = st.form_submit_button("Submit")
@@ -101,7 +100,7 @@ with st.form("color_input_form", enter_to_submit=False):
         st.success(f"Warna Baru berhasil di-input")
 
 with st.form("item_input_form", enter_to_submit=False):
-    st.subheader("Input Item Baru:")
+    st.subheader("Input Item Baru")
     item_name_input = st.text_input("Item")
 
     submitted = st.form_submit_button("Submit")
