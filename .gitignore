@@ -2,4 +2,4 @@ __pycache__/
 .idea
 .env
 raw_data
-token_docs.json
+*.json

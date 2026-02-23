@@ -11,7 +11,7 @@ SCOPES = [
 ]
 
 TOKEN_FILE = "token_docs.json"
-CREDENTIALS_FILE = "credentials.json"
+creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
 
 def get_credentials():
@@ -20,12 +20,15 @@ def get_credentials():
     if os.path.exists(TOKEN_FILE):
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
+    if not creds_json:
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON is not set in the environment")
+
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_FILE,
+                creds_json,
                 SCOPES,
             )
             creds = flow.run_local_server(port=0)
