@@ -1,7 +1,15 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
+from datetime import datetime
 
 from data_integrator import get_items_in_stock, transfer_via_logs
+
+from services.delivery_order_service import (
+    build_delivery_order_from_rows,
+    generate_documents_for_delivery_order,
+)
+from utils.formatting import format_rupiah
+
 
 # -----------------------------------------------------------------------------
 # Page config
@@ -22,6 +30,7 @@ STORE_ID_BY_NAME = {
 WAREHOUSE_STORE_NAME = "gudang"
 WAREHOUSE_STORE_ID = STORE_ID_BY_NAME[WAREHOUSE_STORE_NAME]
 
+
 # -----------------------------------------------------------------------------
 # 1) Pick destination store
 # -----------------------------------------------------------------------------
@@ -33,6 +42,7 @@ target_store_id = STORE_ID_BY_NAME[store_name]
 
 st.write(f"Stok akan dikirim dari **{WAREHOUSE_STORE_NAME}** ke **{store_name}**.")
 st.divider()
+
 
 # -----------------------------------------------------------------------------
 # 2) Load stock from gudang
@@ -54,7 +64,6 @@ if not items_in_stock:
     st.warning("Tidak ada stok di gudang.")
     st.stop()
 
-# Raw and display dataframes
 df_stock_raw = pd.DataFrame.from_dict(items_in_stock, orient="index").reset_index(drop=True)
 
 df_stock_display = df_stock_raw[
@@ -78,7 +87,8 @@ df_stock_display["Harga Jual"] = df_stock_display["Harga Jual"].apply(
 )
 
 st.subheader("Stok Gudang")
-st.dataframe(df_stock_display, width='stretch', hide_index=True)
+st.dataframe(df_stock_display, width="stretch", hide_index=True)
+
 
 # -----------------------------------------------------------------------------
 # 3) Helper maps for SKU and Size
@@ -96,17 +106,18 @@ sku_options_all = sorted(sku_set)
 
 st.divider()
 
+
 # -----------------------------------------------------------------------------
 # 4) Manage number of line items
 # -----------------------------------------------------------------------------
 if "num_items" not in st.session_state:
     st.session_state.num_items = 1
 
-
 if st.button("➕ Tambah Item"):
     st.session_state.num_items += 1
 
 st.subheader("Items yang akan dikirim")
+
 
 # -----------------------------------------------------------------------------
 # 5) Dynamic rows with UNIQUE (SKU, Size) rule
@@ -129,30 +140,23 @@ for i in range(st.session_state.num_items):
 
     available_sku_options = []
     for sku in sku_options_all:
-        # all sizes for this sku
         sizes_for_sku = {
             meta["size"]
             for meta in items_in_stock.values()
             if meta["sku"] == sku
         }
-        # sizes not yet used for this sku
         remaining_sizes = [
             s for s in sizes_for_sku
             if (sku, s) not in used_pairs_before
         ]
-
-        # keep SKU if it still has free sizes,
-        # or if it's already selected in this row
         if remaining_sizes or sku == current_selected_sku:
             available_sku_options.append(sku)
 
-    # If nothing is available, bail out for this row
     if not available_sku_options:
         st.info("Tidak ada kombinasi SKU+Size lain yang tersedia untuk dipilih.")
         st.divider()
         continue
 
-    # (3) SKU dropdown with filtered options
     with col_sku:
         selected_sku = st.selectbox(
             "SKU",
@@ -160,7 +164,6 @@ for i in range(st.session_state.num_items):
             key=f"sku_{i}",
         )
 
-    # (4) Based on selected SKU, filter sizes that are not used yet
     sizes_for_selected_sku = sorted(
         {
             meta["size"]
@@ -174,7 +177,6 @@ for i in range(st.session_state.num_items):
     available_sizes = []
     for size in sizes_for_selected_sku:
         pair = (selected_sku, size)
-        # allow if not used yet, or already selected in this row
         if pair not in used_pairs_before or size == current_selected_size:
             available_sizes.append(size)
 
@@ -190,7 +192,6 @@ for i in range(st.session_state.num_items):
             key=f"size_{i}",
         )
 
-    # (5) Look up meta for this specific SKU+Size
     item_key = sku_size_to_key.get((selected_sku, selected_size))
     meta = items_in_stock.get(item_key, {}) if item_key else {}
 
@@ -223,10 +224,11 @@ for i in range(st.session_state.num_items):
 
     st.divider()
 
+
 # -----------------------------------------------------------------------------
-# 6) Submit: transfer via logs + summary
+# 6) Submit: transfer + summary + two DOCX documents
 # -----------------------------------------------------------------------------
-submitted = st.button("Transfer & Generate Delivery Order")
+submitted = st.button("Transfer & Generate Documents")
 
 if submitted:
     order_rows = []
@@ -250,22 +252,21 @@ if submitted:
         size = meta["size"]
         sku = meta["sku"]
 
-        harga_jual = meta.get("harga_jual", 0.0)
+        harga_jual = meta.get("harga_jual", 0.0) or 0
         item_name = meta.get("item_name", "")
         category = meta.get("category", "")
         color = meta.get("color", "")
 
-        # Transfer via insert_stock_log (transfer_out + transfer_in)
         ok, msg = transfer_via_logs(
             item_id=item_id,
             size=size,
             from_store_id=WAREHOUSE_STORE_ID,
             to_store_id=target_store_id,
-            quantity=qty,
+            quantity=int(qty),
         )
         transfer_results.append((sku, size, qty, ok, msg))
 
-        total = harga_jual * qty
+        total = int(harga_jual) * int(qty)
 
         order_rows.append(
             {
@@ -274,8 +275,8 @@ if submitted:
                 "Item": item_name,
                 "Category": category,
                 "Color": color,
-                "Quantity": qty,
-                "Unit Price": harga_jual,
+                "Quantity": int(qty),
+                "Unit Price": int(harga_jual),
                 "Total": total,
             }
         )
@@ -294,22 +295,46 @@ if submitted:
         grand_total = df_order["Total"].sum()
 
         df_display = df_order.copy()
-        df_display["Unit Price"] = df_display["Unit Price"].apply(
-            lambda x: f"Rp {x:,.0f}".replace(",", ".")
-        )
-        df_display["Total"] = df_display["Total"].apply(
-            lambda x: f"Rp {x:,.0f}".replace(",", ".")
-        )
+        df_display["Unit Price"] = df_display["Unit Price"].apply(format_rupiah)
+        df_display["Total"] = df_display["Total"].apply(format_rupiah)
 
         st.subheader("Order Summary")
-        st.dataframe(df_display, width='stretch', hide_index=True)
+        st.dataframe(df_display, width="stretch", hide_index=True)
 
-        st.metric("Grand Total", f"Rp {grand_total:,.0f}".replace(",", "."))
+        st.metric("Grand Total", f"Rp {format_rupiah(int(grand_total))}")
 
         csv = df_order.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download as CSV",
-            data=csv,
-            file_name="delivery_order.csv",
-            mime="text/csv",
+
+        # Build DeliveryOrder domain object
+        delivery_order = build_delivery_order_from_rows(
+            outlet_name=store_name.capitalize(),
+            order_rows=order_rows,
         )
+
+        # Progress + spinner while generating docs
+        progress_text = "Mengenerate dokumen Delivery Order..."
+        progress_bar = st.progress(0, text=progress_text)
+
+        with st.spinner(progress_text):
+            # Generate both DO + Barcode docs (this is the slow call)
+            doc_urls = generate_documents_for_delivery_order(delivery_order)
+
+        # Update progress to 100% once done
+        progress_bar.progress(100, text="Dokumen selesai digenerate ✅")
+
+        # Two columns for side-by-side buttons
+        col_do, col_barcode = st.columns(2)
+
+        with col_do:
+            st.link_button(
+                label="📄 Buka DO",
+                url=f"https://docs.google.com/document/d/{doc_urls['do_path']}",
+                use_container_width=True,
+            )
+
+        with col_barcode:
+            st.link_button(
+                label="🏷️ Buka Barcode",
+                url=f"https://docs.google.com/document/d/{doc_urls['barcode_path']}",
+                use_container_width=True,
+            )

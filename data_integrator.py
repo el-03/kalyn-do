@@ -686,6 +686,7 @@ def get_items_in_stock(store_id: Optional[int] = None) -> Dict[str, Dict[str, An
 
             if key not in result:
                 result[key] = {
+                    "item_id": item_id,
                     "item_name": item_name,
                     "category": category,
                     "color": color,

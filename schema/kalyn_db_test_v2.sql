@@ -151,7 +151,7 @@ CREATE TABLE kalyn_db_test.item_price_history
 
     harga_jual INTEGER GENERATED ALWAYS AS (
         ROUND(
-            (harga_kain + ongkos_jahit + ongkos_transport + ongkos_packing) * 1.25
+            (harga_kain + ongkos_jahit + ongkos_transport + ongkos_packing) * 3
         )::int
     ) STORED,
 
