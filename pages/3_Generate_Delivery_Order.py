@@ -332,7 +332,7 @@ if submitted:
                 use_container_width=True,
             )
             do_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
-            st.write("*Folder Delivery Order*: [link](%s)" % do_url)
+            st.write("**Folder Delivery Order:** *[link](%s)*" % do_url)
 
         with col_barcode:
             st.link_button(
@@ -341,4 +341,4 @@ if submitted:
                 use_container_width=True,
             )
             b_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
-            st.write("*Folder Barcode*: [link](%s)" % b_url)
+            st.write("**Folder Barcode:** *[link](%s)*" % b_url)
