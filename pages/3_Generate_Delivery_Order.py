@@ -319,7 +319,7 @@ if submitted:
                 url=f"https://docs.google.com/document/d/{doc_urls['barcode_path']}",
                 use_container_width=True,
             )
-            b_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
+            b_url = "https://drive.google.com/drive/folders/1j8XwFG77REXsdyvA6bXt19F3GPFWU4JO"
             st.write("**Folder Barcode:** *[link](%s)*" % b_url)
 
         st.subheader("Status Transfer")
