@@ -284,27 +284,6 @@ if submitted:
     if not order_rows:
         st.error("Tidak ada item yang valid.")
     else:
-        st.subheader("Status Transfer")
-        for sku, size, qty, ok, msg in transfer_results:
-            if ok:
-                st.success(f"Transfer {sku} ({size}) x{qty} ke {outlet_list}: {msg}")
-            else:
-                st.error(f"Transfer {sku} ({size}) x{qty} ke {outlet_list} gagal: {msg}")
-
-        df_order = pd.DataFrame(order_rows)
-        grand_total = df_order["Total"].sum()
-
-        df_display = df_order.copy()
-        df_display["Unit Price"] = df_display["Unit Price"].apply(format_rupiah)
-        df_display["Total"] = df_display["Total"].apply(format_rupiah)
-
-        st.subheader("Order Summary")
-        st.dataframe(df_display, width="stretch", hide_index=True)
-
-        st.metric("Grand Total", f"Rp {format_rupiah(int(grand_total))}")
-
-        csv = df_order.to_csv(index=False).encode("utf-8")
-
         # Build DeliveryOrder domain object
         delivery_order = build_delivery_order_from_rows(
             outlet_name=outlet_list.capitalize(),
@@ -342,3 +321,22 @@ if submitted:
             )
             b_url = "https://drive.google.com/drive/folders/1DBqR79xAqJ-2nCJ3K60NLDbuO3nokXOh"
             st.write("**Folder Barcode:** *[link](%s)*" % b_url)
+
+        st.subheader("Status Transfer")
+        for sku, size, qty, ok, msg in transfer_results:
+            if ok:
+                st.success(f"Transfer {sku} ({size}) x{qty} ke {outlet_list}: {msg}")
+            else:
+                st.error(f"Transfer {sku} ({size}) x{qty} ke {outlet_list} gagal: {msg}")
+
+        df_order = pd.DataFrame(order_rows)
+        grand_total = df_order["Total"].sum()
+
+        df_display = df_order.copy()
+        df_display["Unit Price"] = df_display["Unit Price"].apply(format_rupiah)
+        df_display["Total"] = df_display["Total"].apply(format_rupiah)
+
+        st.subheader("Order Summary")
+        st.dataframe(df_display, width="stretch", hide_index=True)
+
+        st.metric("Grand Total", f"Rp {format_rupiah(int(grand_total))}")
