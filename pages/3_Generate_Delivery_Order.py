@@ -34,10 +34,18 @@ WAREHOUSE_STORE_ID = STORE_ID_BY_NAME[WAREHOUSE_STORE_NAME]
 # 1) Pick destination store
 # -----------------------------------------------------------------------------
 
+outlet_options = [name for name in STORE_ID_BY_NAME.keys() if name != WAREHOUSE_STORE_NAME]
 outlet_list = st.selectbox(
     "Outlet Tujuan",
-    options=[name for name in STORE_ID_BY_NAME.keys() if name != WAREHOUSE_STORE_NAME],
+    options=outlet_options,
+    index=None,
+    placeholder="Outlet Tujuan",
 )
+
+if not outlet_list:
+    st.info("Pilih outlet tujuan untuk melanjutkan.")
+    st.stop()
+
 target_store_id = STORE_ID_BY_NAME[outlet_list]
 
 st.write(f"Stok akan dikirim dari **{WAREHOUSE_STORE_NAME.title()}** ke **{outlet_list.title()}**.")
@@ -113,6 +121,29 @@ st.divider()
 if "num_items" not in st.session_state:
     st.session_state.num_items = 1
 
+
+def _remove_item_row(remove_idx: int) -> None:
+    """Remove one dynamic row and keep remaining row state contiguous."""
+    total_items = st.session_state.num_items
+    if total_items <= 1 or remove_idx < 0 or remove_idx >= total_items:
+        return
+
+    for idx in range(remove_idx, total_items - 1):
+        for field in ("sku", "size", "qty"):
+            current_key = f"{field}_{idx}"
+            next_key = f"{field}_{idx + 1}"
+            if next_key in st.session_state:
+                st.session_state[current_key] = st.session_state[next_key]
+            elif current_key in st.session_state:
+                del st.session_state[current_key]
+
+    last_idx = total_items - 1
+    for field in ("sku", "size", "qty"):
+        st.session_state.pop(f"{field}_{last_idx}", None)
+
+    st.session_state.num_items = total_items - 1
+
+
 if st.button("➕ Tambah Item"):
     st.session_state.num_items += 1
 
@@ -122,10 +153,11 @@ st.subheader("List Item")
 # -----------------------------------------------------------------------------
 # 5) Dynamic rows with UNIQUE (SKU, Size) rule
 # -----------------------------------------------------------------------------
+remove_idx = None
 for i in range(st.session_state.num_items):
     st.markdown(f"**Item {i + 1}**")
 
-    col_sku, col_size, col_qty = st.columns([2, 1.5, 1])
+    col_sku, col_size, col_qty, col_action = st.columns([2, 1.5, 1, 1.2])
 
     # (1) Pairs (SKU, Size) already chosen in previous rows
     used_pairs_before = set()
@@ -214,6 +246,14 @@ for i in range(st.session_state.num_items):
             key=f"qty_{i}",
         )
 
+    with col_action:
+        if st.button(
+            "Hapus Item",
+            key=f"remove_item_{i}",
+            disabled=(st.session_state.num_items <= 1 or i == 0),
+        ):
+            remove_idx = i
+
     formatted_harga = f"Rp {harga_jual:,.0f}".replace(",", ".")
     st.caption(
         f"Item: **{item_name}** | Kategori: **{category}** | Warna: **{color}** | "
@@ -223,6 +263,10 @@ for i in range(st.session_state.num_items):
     )
 
     st.divider()
+
+if remove_idx is not None:
+    _remove_item_row(remove_idx)
+    st.rerun()
 
 
 # -----------------------------------------------------------------------------
