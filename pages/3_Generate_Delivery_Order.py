@@ -144,6 +144,18 @@ def _remove_item_row(remove_idx: int) -> None:
     st.session_state.num_items = total_items - 1
 
 
+def _request_remove_item(remove_idx: int) -> None:
+    st.session_state.remove_item_idx = remove_idx
+
+
+if "remove_item_idx" not in st.session_state:
+    st.session_state.remove_item_idx = None
+
+if st.session_state.remove_item_idx is not None:
+    _remove_item_row(st.session_state.remove_item_idx)
+    st.session_state.remove_item_idx = None
+
+
 if st.button("➕ Tambah Item"):
     st.session_state.num_items += 1
 
@@ -153,7 +165,6 @@ st.subheader("List Item")
 # -----------------------------------------------------------------------------
 # 5) Dynamic rows with UNIQUE (SKU, Size) rule
 # -----------------------------------------------------------------------------
-remove_idx = None
 for i in range(st.session_state.num_items):
     st.markdown(f"**Item {i + 1}**")
 
@@ -236,23 +247,29 @@ for i in range(st.session_state.num_items):
     if max_qty < 1:
         max_qty = 1
 
+    qty_key = f"qty_{i}"
+    if qty_key not in st.session_state:
+        st.session_state[qty_key] = 1
+    else:
+        st.session_state[qty_key] = min(max(1, int(st.session_state[qty_key])), max_qty)
+
     with col_qty:
         qty = st.number_input(
             "Jumlah",
             min_value=1,
             max_value=max_qty,
             step=1,
-            value=1,
-            key=f"qty_{i}",
+            key=qty_key,
         )
 
     with col_action:
-        if st.button(
+        st.button(
             "Hapus Item",
             key=f"remove_item_{i}",
-            disabled=(st.session_state.num_items <= 1 or i == 0),
-        ):
-            remove_idx = i
+            disabled=st.session_state.num_items <= 1,
+            on_click=_request_remove_item,
+            args=(i,),
+        )
 
     formatted_harga = f"Rp {harga_jual:,.0f}".replace(",", ".")
     st.caption(
@@ -263,10 +280,6 @@ for i in range(st.session_state.num_items):
     )
 
     st.divider()
-
-if remove_idx is not None:
-    _remove_item_row(remove_idx)
-    st.rerun()
 
 
 # -----------------------------------------------------------------------------
